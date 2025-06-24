@@ -10,6 +10,7 @@ import plotly.express as px
 import plotly.io as pio
 from datetime import datetime
 import base64
+import numpy as np
 
 # -------------------- Page Config -------------------- #
 st.set_page_config(page_title="🚨 Smart Anomaly Detector", layout="wide", page_icon="📊")
@@ -34,7 +35,7 @@ with col1:
 with col2:
     st.markdown("""
         <h1 style='color:#4A90E2'>🚨 Smart Anomaly Detection App</h1>
-        <p>Upload your dataset and visualize anomalies using Isolation Forest and interactive line charts.</p>
+        <p>Upload your dataset and visualize <strong>only drastic anomalies</strong> using Isolation Forest with Z-score filtering.</p>
     """, unsafe_allow_html=True)
 
 # -------------------- File Upload -------------------- #
@@ -66,19 +67,52 @@ if uploaded_file:
     st.markdown("### 🧪 Anomaly Detection Sensitivity")
     contamination = st.slider("Set contamination (% outliers)", 0.01, 0.3, 0.05, 0.01)
 
-    # Preprocessing
+    st.markdown("### 🚦 Drastic Change Filtering")
+    z_threshold = st.slider("📏 Minimum Z-score to consider a change 'drastic'", 2.5, 5.0, 3.0, 0.1)
+
+    # -------------------- Preprocessing -------------------- #
     data = df[selected_features]
     imputer = SimpleImputer(strategy="mean")
     X_clean = imputer.fit_transform(data)
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_clean)
 
-    # Model
-    model = IsolationForest(contamination=contamination, random_state=42)
-    predictions = model.fit_predict(X_scaled)
-    df["Anomaly"] = pd.Series(predictions).map({1: "Normal", -1: "Anomaly"})
+    # Z-score filter to keep only drastic variations
+    z_scores = np.abs(X_scaled)
+    mask = (z_scores > z_threshold).any(axis=1)
+    X_filtered = X_scaled[mask]
 
-    st.success(f"✅ Total Rows: {len(df)} | 🚨 Anomalies Found: {(df['Anomaly'] == 'Anomaly').sum()}")
+    # Isolation Forest on filtered data
+    model = IsolationForest(contamination=contamination, n_estimators=150, max_samples='auto', random_state=42)
+    predictions_all = np.ones(len(df))  # Start with all normal
+
+    if len(X_filtered) > 0:
+        filtered_indices = np.where(mask)[0]
+        preds_filtered = model.fit_predict(X_filtered)
+        for idx, val in zip(filtered_indices, preds_filtered):
+            if val == -1:
+                predictions_all[idx] = -1
+
+    df["Anomaly"] = pd.Series(predictions_all).map({1: "Normal", -1: "Anomaly"})
+
+    # -------------------- Notification -------------------- #
+    anomaly_count = (df["Anomaly"] == "Anomaly").sum()
+
+    if anomaly_count > 0:
+        alert_html = f"""
+        <audio autoplay>
+          <source src="https://www.soundjay.com/buttons/beep-07.mp3" type="audio/mpeg">
+        </audio>
+        <script>
+          alert("🚨 Alert! Drastic anomalies detected: {anomaly_count} rows.");
+        </script>
+        """
+        st.components.v1.html(alert_html)
+        st.toast(f"🚨 {anomaly_count} anomalies detected!", icon="⚠️")
+    else:
+        st.toast("✅ No drastic anomalies found.", icon="✅")
+
+    st.success(f"✅ Total Rows: {len(df)} | 🚨 Drastic Anomalies Found: {anomaly_count}")
 
     # -------------------- Labeled Data Download -------------------- #
     st.download_button("📥 Download Labeled Data", df.to_csv(index=False), file_name="labeled_data.csv")
