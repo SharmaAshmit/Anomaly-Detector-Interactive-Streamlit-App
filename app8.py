@@ -19,7 +19,7 @@ st.set_page_config(page_title="🚨 Smart Anomaly Detector", layout="wide", page
 def load_lottie_url(url: str):
     try:
         r = requests.get(url)
-        if r.status_code != 200:
+        if r.status_code != 200:    
             return None
         return r.json()
     except Exception:
@@ -33,7 +33,7 @@ with col1:
     if lottie_json:
         st_lottie(lottie_json, height=200, key="lottie-anomaly")
 with col2:
-    st.markdown("""
+    st.markdown("""z
         <h1 style='color:#4A90E2'>🚨 Smart Anomaly Detection App</h1>
         <p>Upload your dataset and visualize <strong>only drastic anomalies</strong> using Isolation Forest with Z-score filtering.</p>
     """, unsafe_allow_html=True)
